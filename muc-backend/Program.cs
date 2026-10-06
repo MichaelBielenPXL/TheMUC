@@ -10,7 +10,18 @@ builder.AddServiceDefaults();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MessageParser>();
-builder.Services.AddSingleton<IEventExtractor, NoEventExtractor>();
+// Without a key the fallback is off and unreadable messages simply give "no events found".
+builder.Services.AddSingleton<IEventExtractor>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var apiKey = configuration["Anthropic:ApiKey"];
+    return string.IsNullOrWhiteSpace(apiKey)
+        ? new NoEventExtractor()
+        : new ClaudeEventExtractor(
+            apiKey,
+            configuration["Anthropic:Model"] ?? "claude-opus-5-5",
+            services.GetRequiredService<ILogger<ClaudeEventExtractor>>());
+});
 
 // One global window, not per client: behind the Cloudflare Tunnel every request has the same address.
 // Configuration is read when the options are first used, so tests and containers can override it.
