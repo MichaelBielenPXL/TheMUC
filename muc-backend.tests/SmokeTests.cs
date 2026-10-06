@@ -1,14 +1,13 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MucBackend.Tests;
 
-public class SmokeTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class SmokeTests(MucApp app) : IClassFixture<MucApp>
 {
     [Fact]
     public async Task Health_endpoint_responds()
     {
-        var response = await factory.CreateClient().GetAsync("/health");
+        var response = await app.CreateClient().GetAsync("/health");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }

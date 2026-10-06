@@ -1,7 +1,9 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using MucBackend.Endpoints;
 using MucBackend.Extraction;
+using MucBackend.History;
 using MucBackend.Parsing;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +25,9 @@ builder.Services.AddSingleton<IEventExtractor>(services =>
             services.GetRequiredService<ILogger<ClaudeEventExtractor>>());
 });
 
+builder.Services.AddDbContext<MucDbContext>((services, options) =>
+    options.UseSqlite(services.GetRequiredService<IConfiguration>().GetConnectionString("Muc")));
+
 // One global window, not per client: behind the Cloudflare Tunnel every request has the same address.
 // Configuration is read when the options are first used, so tests and containers can override it.
 builder.Services.AddRateLimiter(options => options.RejectionStatusCode = StatusCodes.Status429TooManyRequests);
@@ -35,10 +40,17 @@ builder.Services.AddOptions<RateLimiterOptions>().Configure<IConfiguration>((opt
 
 var app = builder.Build();
 
+// A single instance owns the database file, so migrating at startup is safe.
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.GetRequiredService<MucDbContext>().Database.Migrate();
+}
+
 app.UseRateLimiter();
 
 app.MapDefaultEndpoints();
 app.MapEventEndpoints();
+app.MapImportEndpoints();
 
 app.Run();
 
