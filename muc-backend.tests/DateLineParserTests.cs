@@ -42,6 +42,11 @@ public class DateLineParserTests
     [InlineData("**Maandag 28 september:**")]
     [InlineData("  Maandag  28   september  ")]
     [InlineData("Maandag 28 september")]
+    [InlineData("📅 Maandag 28 september")]
+    [InlineData("Maandag 28 september 🍻")]
+    [InlineData("- Maandag 28 september")]
+    [InlineData("• Maandag 28 september")]
+    [InlineData("(Maandag 28 september)")]
     public void Ignores_chat_decoration_and_odd_spacing(string line)
     {
         Assert.Equal(new DateLine(28, 9, null, DayOfWeek.Monday), DateLineParser.TryParse(line));

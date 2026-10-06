@@ -98,6 +98,52 @@ public class MessageParserTests
         Assert.Equal(["Tot dan!"], result.SkippedLines);
     }
 
+    [Theory]
+    [InlineData("\uFEFF")]
+    [InlineData("\u200B")]
+    public void An_invisible_character_before_the_date_is_ignored(string invisible)
+    {
+        var result = _parser.Parse($"{invisible}Maandag 28 september\nFakbar");
+
+        Assert.Equal([Event(9, 28, "Fakbar")], result.Events);
+    }
+
+    [Fact]
+    public void A_line_holding_only_a_zero_width_space_closes_the_day()
+    {
+        var result = _parser.Parse("Maandag 28 september\nFakbar\n\u200B\nTot dan!");
+
+        Assert.Equal([Event(9, 28, "Fakbar")], result.Events);
+        Assert.Equal(["Tot dan!"], result.SkippedLines);
+    }
+
+    [Fact]
+    public void A_decorated_date_line_opens_its_own_day()
+    {
+        var result = _parser.Parse("Maandag 28 september\nFakbar\n📅 Dinsdag 29 september\nCantus");
+
+        Assert.Equal([Event(9, 28, "Fakbar"), Event(9, 29, "Cantus")], result.Events);
+    }
+
+    [Fact]
+    public void A_link_in_angle_brackets_attaches_to_its_event()
+    {
+        var result = _parser.Parse("Maandag 28 september\nFakbar\n<https://example.com/a>");
+
+        Assert.Equal([Event(9, 28, "Fakbar", "https://example.com/a")], result.Events);
+    }
+
+    [Theory]
+    [InlineData("-")]
+    [InlineData("*")]
+    [InlineData("•")]
+    public void List_markers_are_not_part_of_titles_or_links(string marker)
+    {
+        var result = _parser.Parse($"Maandag 28 september\n{marker} Fakbar - Dionysia\n{marker} https://example.com/a");
+
+        Assert.Equal([Event(9, 28, "Fakbar - Dionysia", "https://example.com/a")], result.Events);
+    }
+
     [Fact]
     public void A_repeated_event_appears_once()
     {

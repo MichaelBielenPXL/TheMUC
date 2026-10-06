@@ -41,8 +41,8 @@ public static class DateLineParser
         ["december"] = 12, ["dec"] = 12,
     };
 
-    // Characters chat apps wrap around a heading: **bold**, __underline__, # heading, "date:".
-    private static readonly char[] Decoration = ['*', '_', '#', '~', '>', ':', ' '];
+    // Whatever chat apps put around a heading: **bold**, # heading, "- " bullets, "date:", emoji.
+    private static readonly Regex Decoration = new(@"^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$");
 
     private const string Weekday = @"(?:(?<wd>[a-z]+)\.?,?\s+)?";
     private const string Year = @"(?:,?\s+(?<y>\d{4}))?";
@@ -62,7 +62,7 @@ public static class DateLineParser
 
     public static DateLine? TryParse(string line)
     {
-        var text = Regex.Replace(line.Trim().Trim(Decoration), @"\s+", " ").ToLowerInvariant();
+        var text = Regex.Replace(Decoration.Replace(line, ""), @"\s+", " ").ToLowerInvariant();
 
         foreach (var pattern in Patterns)
         {
