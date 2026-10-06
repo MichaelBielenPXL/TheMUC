@@ -1,3 +1,5 @@
+import { CalendarImport } from '@/features/calendar-import'
+
 export function App() {
   return (
     <main>
@@ -7,6 +9,7 @@ export function App() {
           Paste a weekly overview, check the events, download an .ics file.
         </p>
       </header>
+      <CalendarImport initial={null} />
     </main>
   )
 }
