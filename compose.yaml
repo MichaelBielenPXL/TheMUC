@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: muc-backend/Dockerfile
+    environment:
+      ConnectionStrings__Muc: Data Source=/data/muc.db
+      # Empty disables the AI fallback.
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - muc-data:/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./muc-frontend
+    depends_on:
+      - backend
+    # Loopback only: the Cloudflare Tunnel is the way in from outside.
+    ports:
+      - "127.0.0.1:${MUC_PORT:-8080}:80"
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  muc-data:
