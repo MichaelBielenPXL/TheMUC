@@ -1,5 +1,9 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-builder.AddProject<Projects.muc_backend>("backend");
+var backend = builder.AddProject<Projects.muc_backend>("backend");
+
+builder.AddViteApp("frontend", "../muc-frontend")
+    .WithReference(backend)
+    .WaitFor(backend);
 
 builder.Build().Run();
