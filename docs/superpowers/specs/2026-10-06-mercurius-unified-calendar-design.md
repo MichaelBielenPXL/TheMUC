@@ -40,8 +40,10 @@ muc-frontend/           React 19 + Vite + TypeScript
 ```
 
 In development the AppHost starts both apps and hands the backend URL to Vite,
-which proxies `/api` to it. The Anthropic API key is an Aspire secret parameter
-backed by user secrets; it is never committed.
+which proxies `/api` to it. The Anthropic API key is optional, so it is not an
+Aspire parameter (those block startup until filled in): in development it is a
+user secret of the backend project, in deployment an environment variable. It
+is never committed.
 
 The WeatherForecast template code is removed.
 
@@ -79,7 +81,8 @@ null or an absolute `http`/`https` URL.
 ```
 
 `source` is `rules` or `llm`. Blank `text`, or text over 20 000 characters,
-returns 400. The endpoint is rate limited with one global fixed window,
+returns 400. The endpoint is rate limited with one global fixed window
+(30 requests a minute by default, configurable),
 because it can trigger a paid API call. The limit is global rather than per
 client IP: behind the tunnel every request arrives from the same address.
 
@@ -104,6 +107,7 @@ One table, `Imports`:
 | `SourceText` | text | the pasted message |
 | `Source` | text | `rules` or `llm` |
 | `EventsJson` | text | the saved events, as JSON |
+| `EventCount`, `FirstDate`, `LastDate` | integer, date, date | copied from the events so the history list need not load them |
 
 Events are stored as JSON in the row rather than in a second table: they are
 only ever read and written together with their import. EF Core migrations are
@@ -123,6 +127,10 @@ Processes the text line by line, trimming each line.
    - or numeric `d/m`, `d-m`, `d.m`, each with an optional `/yyyy` or `/yy`.
      Numeric dates are day-first.
    - month-first English order (`September 28`) is also accepted for named months.
+   - ISO `yyyy-mm-dd`
+
+   Chat decoration around the date (`**bold**`, `# heading`, a trailing `:`) is
+   ignored.
 2. **Inside a day**
    - a line that is a URL (`http://` or `https://`) attaches to the event above
      it; if that event already has a URL, or there is no event yet, the line is
@@ -130,6 +138,9 @@ Processes the text line by line, trimming each line.
    - any other non-blank line starts a new event with that line as its title
    - a blank line closes the day
 3. **Outside a day** — every non-blank line is reported in `skippedLines`.
+
+An event repeated with the same date and title — two overlapping messages
+pasted together — is returned once.
 
 Because a date line must be nothing but a date, the chat header
 `Matteo — 04/10/2026, 21:11` is not a date line, and because a blank line
@@ -152,7 +163,8 @@ When the date line has no year:
 Runs only when the rule parser returns zero events and an API key is
 configured. Sends the message to Claude with today's date and a structured
 output schema matching the event shape; returned events are validated against
-the event rules and invalid ones dropped. Model name is configuration.
+the event rules and invalid ones dropped. The model is configuration and
+defaults to `claude-opus-5-5` at low effort.
 
 No key configured, or the call fails: the endpoint returns the rule parser's
 empty result with `source: "rules"`, and a failure is logged. The user sees
@@ -258,7 +270,7 @@ Backend, xUnit:
 - year inference around a year boundary, with and without weekday
 - ICS writer: escaping, folding of long and non-ASCII titles, CRLF, stable UID
 - event validation, and the 400 cases of `parse` and `imports`
-- imports round trip against an in-memory SQLite database: save, list, get,
+- imports round trip against a temporary SQLite file per test: save, list, get,
   ics, delete, 404
 - the fallback being skipped without a key
 
