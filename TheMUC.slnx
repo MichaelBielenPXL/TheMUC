@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="muc-apphost/muc-apphost.csproj" />
+  <Project Path="muc-backend.tests/muc-backend.tests.csproj" />
+  <Project Path="muc-backend/muc-backend.csproj" />
+  <Project Path="muc-servicedefaults/muc-servicedefaults.csproj" />
+</Solution>

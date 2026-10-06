@@ -480,3 +480,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Mercurius Unified Calendar
+.env
+*.db
+*.db-shm
+*.db-wal

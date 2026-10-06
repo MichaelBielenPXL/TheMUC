@@ -1,6 +1,0 @@
-@muc_backend_HostAddress = http://localhost:5246
-
-GET {{muc_backend_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
