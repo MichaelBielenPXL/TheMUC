@@ -4,9 +4,9 @@ Date: 2026-10-06
 
 ## Goal
 
-Paste a weekly-overview chat message listing student events, preview the events
-that were recognised, and download an `.ics` file that imports into any
-calendar.
+Paste a weekly-overview chat message listing student events, review and correct
+the events that were recognised, and download an `.ics` file that imports into
+any calendar. Earlier imports stay available in a history table.
 
 Success: the three sample messages in `muc-backend.tests/Samples/` each produce
 exactly the events a human reads in them, on the right dates, with no intro,
@@ -17,56 +17,96 @@ outro or chat-header lines turned into events.
 | Topic | Decision |
 |---|---|
 | Parsing | Rule-based first; LLM (Claude) only when the rules find zero events |
-| Flow | Read-only preview, then download |
-| ICS generation | Backend, from the event list the frontend previewed |
+| Flow | Editable preview, then download |
+| ICS generation | Backend, from the saved (edited) event list |
 | Event time | All-day. Times in prose (`om 21:30`) stay in the title |
 | Year | Not in the message; inferred (see below) |
-| Persistence, auth | None |
+| History | One SQLite table via EF Core |
+| Accounts | None. History is shared by everyone who can reach the app |
+| Development | Aspire AppHost |
+| Deployment | Hand-written `compose.yaml` |
 
 ## Solution layout
 
 ```
 TheMUC.slnx
+compose.yaml
+.env.example
 muc-apphost/            Aspire AppHost: runs backend + Vite frontend
 muc-servicedefaults/    Standard Aspire telemetry + health checks
-muc-backend/            ASP.NET Core API (.NET 10)
+muc-backend/            ASP.NET Core API (.NET 10), EF Core + SQLite
 muc-backend.tests/      xUnit
 muc-frontend/           React 19 + Vite + TypeScript
 ```
 
-The AppHost starts both apps and hands the backend URL to Vite, which proxies
-`/api` to it. The Anthropic API key is an Aspire secret parameter backed by
-user secrets; it is never committed.
+In development the AppHost starts both apps and hands the backend URL to Vite,
+which proxies `/api` to it. The Anthropic API key is an Aspire secret parameter
+backed by user secrets; it is never committed.
 
 The WeatherForecast template code is removed.
 
 ## Backend
 
-### API
-
-`POST /api/events/parse`
+### Event shape
 
 ```json
-// request
-{ "text": "Maandag 28 september\n..." }
-// response
+{ "date": "2026-09-28", "title": "AURAfarm Schachtenfakbar - Dionysia", "url": "https://www.facebook.com/events/1660066248783093" }
+```
+
+`url` is null when the event has no link. An event is valid when `date` is a
+real ISO date, `title` is non-blank and at most 500 characters, and `url` is
+null or an absolute `http`/`https` URL.
+
+### API
+
+| Method and path | Purpose |
+|---|---|
+| `POST /api/events/parse` | Parse text into events. Stores nothing |
+| `POST /api/imports` | Save an import (the edited events) to history |
+| `GET /api/imports` | History list, newest first, at most 100 |
+| `GET /api/imports/{id}` | One import, including source text and events |
+| `GET /api/imports/{id}/ics` | The import as an `.ics` download |
+| `DELETE /api/imports/{id}` | Remove an import from history |
+
+`POST /api/events/parse` — request `{ "text": "..." }`, response:
+
+```json
 {
-  "events": [{ "date": "2026-09-28", "title": "AURAfarm Schachtenfakbar - Dionysia", "url": "https://www.facebook.com/events/1660066248783093" }],
+  "events": [ /* event shape */ ],
   "skippedLines": ["Het is weer tijd voor een week overzicht!"],
   "source": "rules"
 }
 ```
 
-`url` is null when the event has no link. `source` is `rules` or `llm`.
-Empty or whitespace-only `text` returns 400. Text over 20 000 characters
-returns 400 (this is a pasted chat message, and the text may be sent to a paid
-API).
+`source` is `rules` or `llm`. Blank `text`, or text over 20 000 characters,
+returns 400. The endpoint is rate limited (fixed window, per client IP)
+because it can trigger a paid API call.
 
-`POST /api/events/ics`
+`POST /api/imports` — request `{ "sourceText": "...", "source": "rules", "events": [...] }`.
+Returns 201 with `{ "id", "createdAt", "eventCount" }`. An empty event list, any
+invalid event, or more than 200 events returns 400.
 
-Request `{ "events": [...] }` in the same event shape. Response is
-`text/calendar` with `Content-Disposition: attachment; filename="mercurius.ics"`.
-An empty list, an invalid date, or an empty title returns 400.
+`GET /api/imports` — rows of `{ "id", "createdAt", "eventCount", "firstDate", "lastDate", "source" }`.
+
+`GET /api/imports/{id}/ics` — `text/calendar` with
+`Content-Disposition: attachment; filename="mercurius-<firstDate>.ics"`.
+Unknown ids return 404 on all `{id}` routes.
+
+### History storage
+
+One table, `Imports`:
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | integer, key | |
+| `CreatedAt` | UTC timestamp | |
+| `SourceText` | text | the pasted message |
+| `Source` | text | `rules` or `llm` |
+| `EventsJson` | text | the saved events, as JSON |
+
+Events are stored as JSON in the row rather than in a second table: they are
+only ever read and written together with their import. EF Core migrations are
+applied at startup. The database file path comes from configuration.
 
 ### Rule parser
 
@@ -110,8 +150,8 @@ When the date line has no year:
 
 Runs only when the rule parser returns zero events and an API key is
 configured. Sends the message to Claude with today's date and a structured
-output schema matching the event shape; the response is validated the same way
-as an `/ics` request. Model name is configuration.
+output schema matching the event shape; returned events are validated against
+the event rules and invalid ones dropped. Model name is configuration.
 
 No key configured, or the call fails: the endpoint returns the rule parser's
 empty result with `source: "rules"`, and a failure is logged. The user sees
@@ -126,40 +166,83 @@ Hand-written; all-day events need no time zone data.
   `DTEND;VALUE=DATE` (the following day), `SUMMARY`, and when a URL is present
   `URL` and `DESCRIPTION`
 - `UID` is a stable hash of date + title, so re-importing the same message
-  updates events instead of duplicating them
+  updates events instead of duplicating them. Editing an event's date or title
+  therefore makes it a new calendar entry
 - text values escape `\`, `;`, `,` and newlines; lines fold at 75 octets
   without splitting a UTF-8 character; line endings are CRLF
 
 ## Frontend
 
-Follows reacthandbook.dev project standards: feature folder, function
+Follows reacthandbook.dev project standards: feature folders, function
 declarations, `@/` import alias, local state first, a data-fetching library
 for server state, ESLint + Prettier.
 
 ```
 src/
-  features/calendar-import/
-    api/          parseMessage, downloadIcs (TanStack Query mutations)
-    components/   MessageForm, EventPreview
-    types/
-    index.ts
+  features/
+    calendar-import/
+      api/          parseMessage, saveImport
+      components/   MessageForm, EventEditor, EventRow
+      types/
+      index.ts
+    import-history/
+      api/          useImports, getImport, deleteImport
+      components/   HistoryTable
+      index.ts
+  lib/              api client (fetch wrapper), query client
   App.tsx
-  main.tsx        QueryClientProvider
+  main.tsx          QueryClientProvider
 ```
 
-One screen:
+One screen, three parts:
 
-1. Textarea with a visible label, and a Parse button (disabled while empty or
-   pending).
-2. After parsing: events grouped by day, each showing title and link; a count;
-   a collapsed "skipped lines" list; a note when the result came from the LLM.
-3. Download .ics button, which posts the previewed events and saves the
-   response as a file.
+1. **Message** — a labelled textarea and a Parse button (disabled while empty
+   or pending).
+2. **Events** — after parsing, an editable list sorted by date. Each row has a
+   date input, a title input, a link input and a Remove button. Invalid rows
+   are marked and block saving. Also shown: the event count, a collapsed
+   "skipped lines" list, and a note when the result came from the LLM.
+   A **Save & download .ics** button saves the import, then downloads the file
+   from `/api/imports/{id}/ics`.
+3. **History** — a table of earlier imports: saved at, date range, event
+   count, and per row Download, Open and Delete. Open loads that import's text
+   and events back into parts 1 and 2; saving again creates a new history row.
+   Delete asks for confirmation.
 
-States: empty, loading, error (message plus retry), and "no events found".
-Corrections are made by editing the pasted text and parsing again.
+Edited events live in local component state (`useReducer`); the history list
+and the mutations go through TanStack Query, which refreshes the table after a
+save or delete. Adding an event that the parser missed is done by fixing the
+text and parsing again — there is no "add row".
+
+States covered: empty, loading, error (message plus retry), "no events found",
+and empty history.
 
 The Vite template's demo content and unused assets are removed.
+
+## Deployment
+
+`compose.yaml` at the repository root, two services:
+
+- **backend** — built from `muc-backend/Dockerfile` with the repository root as
+  build context (it references `muc-servicedefaults`). A named volume holds the
+  SQLite file. Reads `ANTHROPIC_API_KEY` from `.env`; leaving it empty disables
+  the LLM fallback. Not published to the host.
+- **frontend** — multi-stage image: Node builds the static site, nginx serves
+  it and proxies `/api` to the backend. The only published port, configurable
+  through `.env`.
+
+`.env.example` documents the variables; `.env` is git-ignored. The backend
+serves plain HTTP inside the compose network; TLS is the job of whatever
+reverse proxy sits in front.
+
+There are no accounts, so anyone who can reach the published port can read and
+delete history and trigger parses. The deployment is meant for a private
+network or behind a reverse proxy that handles access; the rate limit on
+`/parse` only caps API spend, it is not access control.
+
+Aspire is the development orchestrator only. The compose file is written by
+hand rather than generated by Aspire, so it stays readable and does not depend
+on Aspire's publisher.
 
 ## Testing
 
@@ -171,12 +254,17 @@ Backend, xUnit:
 - lines that must not be date lines (chat header, prose containing a date)
 - year inference around a year boundary, with and without weekday
 - ICS writer: escaping, folding of long and non-ASCII titles, CRLF, stable UID
-- endpoint validation (400 cases) and the fallback being skipped without a key
+- event validation, and the 400 cases of `parse` and `imports`
+- imports round trip against an in-memory SQLite database: save, list, get,
+  ics, delete, 404
+- the fallback being skipped without a key
 
-Frontend: `eslint` and `tsc -b && vite build` must pass. No component tests —
-the frontend holds no parsing or calendar logic.
+Frontend: `eslint` and `tsc -b && vite build` must pass. No component tests.
+
+Deployment: `docker compose up --build` serves the app, and an import survives
+`docker compose down` followed by `up`.
 
 ## Out of scope
 
-Editing events in the preview, timed events, recurring events, storing
-history, accounts, deployment.
+Accounts and access control, timed events, recurring events, adding events by
+hand, editing a saved import in place.
