@@ -24,4 +24,8 @@
     <ProjectReference Include="..\muc-backend\muc-backend.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Samples/*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
