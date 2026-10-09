@@ -20,19 +20,20 @@ This replaces the download flow. Where the sections below still say
 - **The link is at the top of the page**, with Copy and a `webcal://` Subscribe
   link. Its address is a build-time setting (`CALENDAR_URL`); in development it
   is the page's own origin.
-- **Deployment.** Four compose services on one network: `backend`, `frontend`
-  and two Cloudflare Tunnel connectors.
-  - `tunnel-app` → `http://frontend:80`: the app, behind Cloudflare Access.
-  - `tunnel-calendar` → `http://frontend:8081`, hostname
-    `mucalendar.michaelbielen.be`, no Access. That nginx port serves only
-    `/calendar.ics` (also at `/`) and answers 404 to everything else, so the
-    app and API are not reachable through the public tunnel.
-  - Loopback ports for checking: 8642 (app) and 8643 (feed).
+- **Deployment.** Two compose services on one network: `backend` (not
+  published) and `frontend`. The Cloudflare Tunnels run on another machine in
+  the local network, so the frontend's two ports are published on the network:
+  - 8642: the app. The tunnel pointing here has a Cloudflare Access policy.
+  - 8643: hostname `mucalendar.michaelbielen.be`, no Access. This nginx port
+    serves only `/calendar.ics` (also at `/`) and answers 404 to everything
+    else, so the app and API are not reachable through the public tunnel.
+  - Accepted consequence: anyone on the local network can use the app on 8642
+    without Access. `MUC_BIND=127.0.0.1` takes the ports off the network.
 - **Deploy tool.** The AppHost has a `deploy` resource that is started by hand
   from the Aspire dashboard. It runs `deploy.cmd`, which sends the last commit
   to `/home/rbgh_admin/docker/themuc` on `rbgh_admin@192.168.0.156` over SSH
-  and runs `docker compose --profile tunnel up --detach --build` there. The
-  `.env` in that folder is created once on the server and never overwritten.
+  and runs `docker compose up --detach --build` there. An optional `.env` in
+  that folder stays on the server and is never overwritten.
 - **Considered and dropped:** app-level accounts with a GitHub Pages frontend.
 
 ## Goal

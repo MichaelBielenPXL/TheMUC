@@ -10,4 +10,4 @@ if "%~2"=="" (
 )
 set KEY=
 if not "%~3"=="" set KEY=-i "%~3" -o IdentitiesOnly=yes
-git -c core.autocrlf=false archive HEAD | ssh %KEY% -o BatchMode=yes %1 "mkdir -p %2 && tar -x -C %2 && cd %2 && docker compose --profile tunnel up --detach --build --remove-orphans"
+git -c core.autocrlf=false archive HEAD | ssh %KEY% -o BatchMode=yes %1 "mkdir -p %2 && tar -x -C %2 && cd %2 && docker compose up --detach --build --remove-orphans"

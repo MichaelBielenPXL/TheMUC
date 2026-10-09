@@ -1,6 +1,11 @@
 # Frontend and backend share this project's default network, so nginx reaches the
-# API as http://backend:8080. Nothing is published beyond loopback: the two
-# Cloudflare Tunnels are the only way in from outside.
+# API as http://backend:8080. The backend is not published at all.
+#
+# The frontend is published on the local network, because the Cloudflare Tunnels
+# run on another machine and point here:
+#   app tunnel (with an Access policy)      -> http://<this server>:8642
+#   mucalendar.michaelbielen.be (no Access) -> http://<this server>:8643
+# Anyone on the local network can reach both ports directly, without Access.
 services:
   backend:
     build:
@@ -22,34 +27,10 @@ services:
     depends_on:
       - backend
     # Port 80 is the app, port 8081 serves only the calendar feed.
-    # Loopback only, for checking the deployment from the server itself.
+    # Set MUC_BIND=127.0.0.1 to keep both off the network.
     ports:
-      - "127.0.0.1:${MUC_PORT:-8642}:80"
-      - "127.0.0.1:${MUC_CALENDAR_PORT:-8643}:8081"
-    restart: unless-stopped
-
-  # The app. Its hostname must have a Cloudflare Access policy.
-  # Public hostname service in the dashboard: http://frontend:80
-  tunnel-app:
-    image: cloudflare/cloudflared:latest
-    profiles: [tunnel]
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${APP_TUNNEL_TOKEN:-}
-    depends_on:
-      - frontend
-    restart: unless-stopped
-
-  # The public calendar feed (mucalendar.michaelbielen.be), no Access policy.
-  # Public hostname service in the dashboard: http://frontend:8081
-  tunnel-calendar:
-    image: cloudflare/cloudflared:latest
-    profiles: [tunnel]
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CALENDAR_TUNNEL_TOKEN:-}
-    depends_on:
-      - frontend
+      - "${MUC_BIND:-0.0.0.0}:${MUC_PORT:-8642}:80"
+      - "${MUC_BIND:-0.0.0.0}:${MUC_CALENDAR_PORT:-8643}:8081"
     restart: unless-stopped
 
 volumes:
