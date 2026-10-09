@@ -26,8 +26,10 @@ public static class ImportEndpoints
         imports.MapPost("/", SaveAsync);
         imports.MapGet("/", ListAsync);
         imports.MapGet("/{id:int}", GetAsync);
-        imports.MapGet("/{id:int}/ics", DownloadAsync);
         imports.MapDelete("/{id:int}", DeleteAsync);
+
+        // The one public route: calendar apps subscribe to it and cannot log in.
+        app.MapGet("/calendar.ics", CalendarAsync);
     }
 
     private static async Task<IResult> SaveAsync(SaveImportRequest request, MucDbContext db, TimeProvider time, CancellationToken ct)
@@ -74,13 +76,13 @@ public static class ImportEndpoints
             ? Results.Ok(new ImportDetail(record.Id, record.CreatedAt, record.Source, record.SourceText, Events(record)))
             : Results.NotFound();
 
-    private static async Task<IResult> DownloadAsync(int id, MucDbContext db, TimeProvider time, CancellationToken ct)
+    // Every event of every import. IcsWriter drops an event that was saved more than once.
+    private static async Task<IResult> CalendarAsync(MucDbContext db, TimeProvider time, CancellationToken ct)
     {
-        if (await db.Imports.FindAsync([id], ct) is not { } record) return Results.NotFound();
+        var imports = await db.Imports.OrderBy(i => i.Id).ToListAsync(ct);
+        var events = imports.SelectMany(Events).OrderBy(e => e.Date);
 
-        var ics = IcsWriter.Write(Events(record), time.GetUtcNow());
-        return Results.File(
-            Encoding.UTF8.GetBytes(ics), "text/calendar; charset=utf-8", $"mercurius-{record.FirstDate:yyyy-MM-dd}.ics");
+        return Results.Text(IcsWriter.Write(events, time.GetUtcNow()), "text/calendar", Encoding.UTF8);
     }
 
     private static async Task<IResult> DeleteAsync(int id, MucDbContext db, CancellationToken ct) =>

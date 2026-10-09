@@ -15,6 +15,8 @@ public static class IcsWriter
         Append(ics, "VERSION:2.0");
         Append(ics, "PRODID:-//Mercurius Unified Calendar//EN");
         Append(ics, "CALSCALE:GREGORIAN");
+        // The name calendar apps show for a subscription.
+        Append(ics, "X-WR-CALNAME:Mercurius Unified Calendar");
 
         // Two events sharing a UID would be one entry to a calendar anyway.
         foreach (var e in events.DistinctBy(Uid))

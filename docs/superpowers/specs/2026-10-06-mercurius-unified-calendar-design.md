@@ -2,6 +2,39 @@
 
 Date: 2026-10-06
 
+## Amendment — 2026-10-09: shared calendar feed
+
+This replaces the download flow. Where the sections below still say
+"download", this amendment wins.
+
+- **One feed instead of files.** `GET /calendar.ics` on the backend returns
+  every event of every saved import, in date order, as an inline
+  `text/calendar` response named "Mercurius Unified Calendar". An event saved
+  more than once (same date and title) appears once. People subscribe to it
+  once; nothing is downloaded from the app.
+- **Removed:** `GET /api/imports/{id}/ics`, the "Save & download .ics" button
+  and the Download action in the history table. The button is now **Add to
+  calendar**; after saving, the page confirms how many events were added.
+- **History is the calendar's contents.** Deleting an import removes its events
+  from the feed.
+- **The link is at the top of the page**, with Copy and a `webcal://` Subscribe
+  link. Its address is a build-time setting (`CALENDAR_URL`); in development it
+  is the page's own origin.
+- **Deployment.** Four compose services on one network: `backend`, `frontend`
+  and two Cloudflare Tunnel connectors.
+  - `tunnel-app` → `http://frontend:80`: the app, behind Cloudflare Access.
+  - `tunnel-calendar` → `http://frontend:8081`, hostname
+    `mucalendar.michaelbielen.be`, no Access. That nginx port serves only
+    `/calendar.ics` (also at `/`) and answers 404 to everything else, so the
+    app and API are not reachable through the public tunnel.
+  - Loopback ports for checking: 8642 (app) and 8643 (feed).
+- **Deploy tool.** The AppHost has a `deploy` resource that is started by hand
+  from the Aspire dashboard. It runs `deploy.cmd`, which sends the last commit
+  to `/home/rbgh_admin/docker/themuc` on `rbgh_admin@192.168.0.156` over SSH
+  and runs `docker compose --profile tunnel up --detach --build` there. The
+  `.env` in that folder is created once on the server and never overwritten.
+- **Considered and dropped:** app-level accounts with a GitHub Pages frontend.
+
 ## Goal
 
 Paste a weekly-overview chat message listing student events, review and correct

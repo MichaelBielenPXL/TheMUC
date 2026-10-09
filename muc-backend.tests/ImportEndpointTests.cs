@@ -76,22 +76,78 @@ public class ImportEndpointTests
     }
 
     [Fact]
-    public async Task Downloads_an_import_as_ics()
+    public async Task The_calendar_feed_holds_the_events_of_every_import_in_date_order()
     {
         using var app = new MucApp();
         var client = app.CreateClient();
-        var id = await SaveAndGetId(client, Doop, Fakbar);
+        await SaveAndGetId(client, Doop);
+        await SaveAndGetId(client, Fakbar);
 
-        var response = await client.GetAsync($"/api/imports/{id}/ics");
+        var response = await client.GetAsync("/calendar.ics");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/calendar", response.Content.Headers.ContentType!.MediaType);
-        Assert.Equal("attachment", response.Content.Headers.ContentDisposition!.DispositionType);
-        Assert.Contains("mercurius-2026-09-28.ics", response.Content.Headers.ContentDisposition.ToString());
+        Assert.Equal("utf-8", response.Content.Headers.ContentType.CharSet);
+        // A subscription is read in place, not downloaded.
+        Assert.Null(response.Content.Headers.ContentDisposition);
         var ics = await response.Content.ReadAsStringAsync();
-        Assert.Contains("SUMMARY:Fakbar - Dionysia\r\n", ics);
-        Assert.Contains("SUMMARY:Doop - ASG\r\n", ics);
         Assert.Contains("DTSTAMP:20261006T120000Z\r\n", ics);
+        var fakbar = ics.IndexOf("SUMMARY:Fakbar - Dionysia\r\n", StringComparison.Ordinal);
+        var doop = ics.IndexOf("SUMMARY:Doop - ASG\r\n", StringComparison.Ordinal);
+        Assert.True(fakbar >= 0 && doop > fakbar, ics);
+    }
+
+    [Fact]
+    public async Task The_calendar_feed_lists_an_event_saved_twice_once()
+    {
+        using var app = new MucApp();
+        var client = app.CreateClient();
+        await SaveAndGetId(client, Fakbar);
+        await SaveAndGetId(client, Fakbar, Doop);
+
+        var lines = (await client.GetStringAsync("/calendar.ics")).Split("\r\n");
+
+        Assert.Single(lines, line => line == "SUMMARY:Fakbar - Dionysia");
+        Assert.Equal(2, lines.Count(line => line == "BEGIN:VEVENT"));
+    }
+
+    [Fact]
+    public async Task Deleting_an_import_removes_its_events_from_the_calendar_feed()
+    {
+        using var app = new MucApp();
+        var client = app.CreateClient();
+        await SaveAndGetId(client, Fakbar);
+        var doop = await SaveAndGetId(client, Doop);
+
+        await client.DeleteAsync($"/api/imports/{doop}");
+        var ics = await client.GetStringAsync("/calendar.ics");
+
+        Assert.Contains("SUMMARY:Fakbar - Dionysia\r\n", ics);
+        Assert.DoesNotContain("Doop - ASG", ics);
+    }
+
+    [Fact]
+    public async Task The_calendar_feed_is_an_empty_calendar_before_anything_is_saved()
+    {
+        using var app = new MucApp();
+
+        var response = await app.CreateClient().GetAsync("/calendar.ics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var ics = await response.Content.ReadAsStringAsync();
+        Assert.StartsWith("BEGIN:VCALENDAR\r\n", ics);
+        Assert.EndsWith("END:VCALENDAR\r\n", ics);
+        Assert.DoesNotContain("BEGIN:VEVENT", ics);
+    }
+
+    [Fact]
+    public async Task There_is_no_per_import_download()
+    {
+        using var app = new MucApp();
+        var client = app.CreateClient();
+        var id = await SaveAndGetId(client, Fakbar);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/imports/{id}/ics")).StatusCode);
     }
 
     [Fact]
@@ -113,7 +169,6 @@ public class ImportEndpointTests
         var client = app.CreateClient();
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/imports/999")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/imports/999/ics")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync("/api/imports/999")).StatusCode);
     }
 

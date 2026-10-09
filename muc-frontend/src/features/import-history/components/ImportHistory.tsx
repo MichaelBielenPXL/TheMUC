@@ -69,12 +69,6 @@ export function ImportHistory({ onOpen }: ImportHistoryProps) {
                   <td>{item.eventCount}</td>
                   <td>
                     <div className="actions">
-                      <a
-                        className="button"
-                        href={`/api/imports/${item.id}/ics`}
-                      >
-                        Download
-                      </a>
                       <button
                         type="button"
                         disabled={open.isPending}

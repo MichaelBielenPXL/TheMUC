@@ -17,6 +17,7 @@ export default defineConfig({
     port,
     proxy: {
       '/api': { target: backendUrl, changeOrigin: true },
+      '/calendar.ics': { target: backendUrl, changeOrigin: true },
     },
   },
 })

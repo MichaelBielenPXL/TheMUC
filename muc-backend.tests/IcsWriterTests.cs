@@ -24,6 +24,7 @@ public class IcsWriterTests
         Assert.Equal("VERSION:2.0", lines[1]);
         Assert.Contains("PRODID:-//Mercurius Unified Calendar//EN", lines);
         Assert.Contains("CALSCALE:GREGORIAN", lines);
+        Assert.Contains("X-WR-CALNAME:Mercurius Unified Calendar", lines);
         Assert.Contains("BEGIN:VEVENT", lines);
         Assert.Contains("DTSTAMP:20261006T123000Z", lines);
         Assert.Contains("DTSTART;VALUE=DATE:20260928", lines);

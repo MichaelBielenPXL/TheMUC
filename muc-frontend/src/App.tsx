@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { FeedLink } from '@/features/calendar-feed'
 import { CalendarImport } from '@/features/calendar-import'
 import { ImportHistory } from '@/features/import-history'
 import type { ImportDetail } from '@/types'
@@ -20,9 +21,11 @@ export function App() {
       <header>
         <h1>Mercurius Unified Calendar</h1>
         <p className="lead">
-          Paste a weekly overview, check the events, download an .ics file.
+          Paste a weekly overview, check the events, add them to the shared
+          calendar.
         </p>
       </header>
+      <FeedLink />
       <CalendarImport key={openCount} initial={opened} />
       <ImportHistory onOpen={handleOpen} />
     </main>

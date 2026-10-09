@@ -42,18 +42,11 @@ export function CalendarImport({ initial }: CalendarImportProps) {
   function handleSave() {
     if (draft === null) return
 
-    save.mutate(
-      {
-        sourceText: draft.sourceText,
-        source: draft.source,
-        events: toCalendarEvents(draft.events),
-      },
-      {
-        // The response is an attachment, so the browser downloads it and stays on this page.
-        onSuccess: (saved) =>
-          window.location.assign(`/api/imports/${saved.id}/ics`),
-      },
-    )
+    save.mutate({
+      sourceText: draft.sourceText,
+      source: draft.source,
+      events: toCalendarEvents(draft.events),
+    })
   }
 
   return (
@@ -69,6 +62,7 @@ export function CalendarImport({ initial }: CalendarImportProps) {
         <EventEditor
           draft={draft}
           isSaving={save.isPending}
+          savedCount={save.data?.eventCount ?? null}
           error={save.error?.message ?? null}
           dispatch={dispatch}
           onSave={handleSave}

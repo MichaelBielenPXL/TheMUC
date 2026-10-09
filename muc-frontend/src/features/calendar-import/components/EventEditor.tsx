@@ -6,6 +6,8 @@ import { EventRow } from './EventRow'
 type EventEditorProps = {
   draft: Draft
   isSaving: boolean
+  /** How many events the last save added, or null when nothing was saved yet. */
+  savedCount: number | null
   error: string | null
   dispatch: Dispatch<DraftAction>
   onSave: () => void
@@ -14,6 +16,7 @@ type EventEditorProps = {
 export function EventEditor({
   draft,
   isSaving,
+  savedCount,
   error,
   dispatch,
   onSave,
@@ -60,7 +63,7 @@ export function EventEditor({
               disabled={isSaving || invalidCount > 0}
               onClick={onSave}
             >
-              {isSaving ? 'Saving…' : 'Save & download .ics'}
+              {isSaving ? 'Saving…' : 'Add to calendar'}
             </button>
             {invalidCount > 0 && (
               <span className="muted">
@@ -71,6 +74,13 @@ export function EventEditor({
             )}
           </div>
         </>
+      )}
+
+      {savedCount !== null && (
+        <p role="status">
+          Added {savedCount} {savedCount === 1 ? 'event' : 'events'} to the
+          calendar. Subscribed calendars pick them up at their next refresh.
+        </p>
       )}
 
       {error && (
